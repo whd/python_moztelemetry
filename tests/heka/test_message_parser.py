@@ -7,14 +7,17 @@
 import json
 from moztelemetry.heka import message_parser
 from moztelemetry.util.streaming_gzip import streaming_gzip_wrapper
+from moztelemetry.util.streaming_zstd import streaming_zstd_wrapper
 
 
 def test_unpack(data_dir):
-    for t in ["plain", "snappy", "mixed", "gzip", "gzip_mixed"]:
+    for t in ["plain", "snappy", "mixed", "gzip", "gzip_mixed", "zstd"]:
         filename = "{}/test_{}.heka".format(data_dir, t)
         with open(filename, "rb") as o:
             if "gzip" in t:
                 o = streaming_gzip_wrapper(o)
+            elif "zstd" in t:
+                o = streaming_zstd_wrapper(o)
             msg = 0
             for r, b in message_parser.unpack(o, try_snappy=True):
                 j = json.loads(r.message.payload)
@@ -25,13 +28,15 @@ def test_unpack(data_dir):
 
 def test_unpack_nosnappy(data_dir):
     expected_counts = {"plain": 10, "snappy": 0, "mixed": 5,
-                       "gzip": 10, "gzip_mixed": 5}
+                       "gzip": 10, "gzip_mixed": 5, "zstd": 10}
     for t in expected_counts.keys():
         count = 0
         filename = "{}/test_{}.heka".format(data_dir, t)
         with open(filename, "rb") as o:
             if "gzip" in t:
                 o = streaming_gzip_wrapper(o)
+            elif "zstd" in t:
+                o = streaming_zstd_wrapper(o)
             try:
                 for r, b in message_parser.unpack(o, try_snappy=False):
                     count += 1
@@ -42,7 +47,7 @@ def test_unpack_nosnappy(data_dir):
 
 def test_unpack_strict(data_dir):
     expected_exceptions = {"plain": False, "snappy": True, "mixed": True,
-                           "gzip": False, "gzip_mixed": True}
+                           "gzip": False, "gzip_mixed": True, "zstd": False}
     for t in expected_exceptions.keys():
         count = 0
         filename = "{}/test_{}.heka".format(data_dir, t)
@@ -51,6 +56,8 @@ def test_unpack_strict(data_dir):
         with open(filename, "rb") as o:
             if "gzip" in t:
                 o = streaming_gzip_wrapper(o)
+            elif "zstd" in t:
+                o = streaming_zstd_wrapper(o)
             try:
                 for r, b in message_parser.unpack(o, strict=True, try_snappy=False):
                     if r.error is not None:
@@ -70,6 +77,12 @@ def test_telemetry(data_dir):
     filename = "{}/test_telemetry_gzip.heka".format(data_dir)
     with open(filename, "rb") as o:
         for r in message_parser.parse_heka_message(streaming_gzip_wrapper(o)):
+            assert set(r.keys()) == top_keys
+            assert set(r["payload"].keys()) == payload_keys
+
+    filename = "{}/test_telemetry_zstd.heka".format(data_dir)
+    with open(filename, "rb") as o:
+        for r in message_parser.parse_heka_message(streaming_zstd_wrapper(o)):
             assert set(r.keys()) == top_keys
             assert set(r["payload"].keys()) == payload_keys
 

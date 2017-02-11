@@ -6,6 +6,7 @@ import StringIO
 import boto3
 
 from .util.streaming_gzip import streaming_gzip_wrapper
+from .util.streaming_zstd import streaming_zstd_wrapper
 
 
 class S3Store:
@@ -39,8 +40,11 @@ class S3Store:
             # get_key must return a file-like object because that's what's
             # required by parse_heka_message
             s3object = bucket.Object(key).get()
-            if s3object.get('ContentEncoding') == "gzip":
+            content_encoding = s3object.get('ContentEncoding')
+            if content_encoding == "gzip":
                 return streaming_gzip_wrapper(s3object['Body'])
+            elif content_encoding == "zstd":
+                return streaming_zstd_wrapper(s3object['Body'])
             else:
                 return s3object['Body']
         except:
